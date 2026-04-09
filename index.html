@@ -2,560 +2,595 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Platformer</title>
+<title>Ovo</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:#fff; display:flex; align-items:center; justify-content:center; height:100vh; font-family:'Courier New',monospace; overflow:hidden; }
-  canvas { border:2px solid #000; display:block; }
+  body { background:#111; display:flex; align-items:center; justify-content:center; height:100vh; font-family:'Courier New',monospace; overflow:hidden; }
+  canvas { display:block; }
 </style>
 </head>
 <body>
-<canvas id="c" width="800" height="500"></canvas>
+<canvas id="c"></canvas>
 <script>
 const c = document.getElementById('c');
 const ctx = c.getContext('2d');
-const W = 800, H = 500;
+const W = 900, H = 500;
+c.width = W; c.height = H;
 
-// ── INPUT ──────────────────────────────────────────────
 const keys = {};
 document.addEventListener('keydown', e => { keys[e.code] = true; e.preventDefault(); });
 document.addEventListener('keyup',   e => { keys[e.code] = false; });
 
-// ── LEVELS ─────────────────────────────────────────────
-// Each level: platforms [{x,y,w,h}], spikes [{x,y,w,h,dir}], spawn {x,y}, flag {x,y}
-// All coords in world space. Camera follows player.
+// ── LEVELS ────────────────────────────────────────────────────────────────────
 const LEVELS = [
-  // LEVEL 1 — basics
+  // 1 — Tutorial: basic jumps
   {
-    spawn: {x:60,y:360},
-    flag:  {x:1400,y:300},
-    platforms: [
-      {x:0,   y:400, w:300, h:20},
-      {x:350, y:380, w:200, h:20},
-      {x:600, y:350, w:200, h:20},
-      {x:860, y:320, w:200, h:20},
-      {x:1120,y:300, w:200, h:20},
-      {x:1350,y:280, w:200, h:20},
-      // floor
-      {x:-200,y:490, w:2000,h:20},
+    spawn:{x:40,y:380}, flag:{x:1500,y:300}, worldW:1700,
+    platforms:[
+      {x:0,y:420,w:250,h:16},{x:300,y:400,w:180,h:16},{x:540,y:370,w:180,h:16},
+      {x:780,y:340,w:180,h:16},{x:1020,y:310,w:180,h:16},{x:1260,y:290,w:180,h:16},
+      {x:1480,y:280,w:200,h:16},{x:-100,y:490,w:2000,h:20},
     ],
-    spikes: [
-      {x:310,y:480,w:30,h:15},
-      {x:560,y:480,w:30,h:15},
-    ],
-    worldW: 1700,
+    spikes:[{x:260,y:475,w:30,h:14},{x:510,y:475,w:30,h:14}],
+    movingPlats:[],
   },
-  // LEVEL 2 — wall jumps
+  // 2 — Wall jumps
   {
-    spawn: {x:40,y:380},
-    flag:  {x:1500,y:100},
-    platforms: [
-      {x:0,   y:420, w:150, h:20},
-      {x:200, y:100, w:20,  h:320}, // left wall shaft
-      {x:300, y:100, w:20,  h:320}, // right wall shaft
-      {x:200, y:100, w:120, h:20},  // top of shaft
-      {x:380, y:300, w:150, h:20},
-      {x:580, y:100, w:20,  h:220},
-      {x:680, y:100, w:20,  h:220},
-      {x:580, y:100, w:120, h:20},
-      {x:760, y:220, w:150, h:20},
-      {x:960, y:100, w:20,  h:140},
-      {x:1060,y:100, w:20,  h:140},
-      {x:960, y:100, w:120, h:20},
-      {x:1140,y:160, w:200, h:20},
-      {x:1390,y:80,  w:200, h:20},
-      {x:-200,y:490, w:2200,h:20},
+    spawn:{x:40,y:380}, flag:{x:1600,y:80}, worldW:1800,
+    platforms:[
+      {x:0,y:420,w:150,h:16},
+      {x:180,y:100,w:16,h:330},{x:280,y:100,w:16,h:330},{x:180,y:100,w:116,h:16},
+      {x:360,y:280,w:140,h:16},
+      {x:560,y:100,w:16,h:200},{x:660,y:100,w:16,h:200},{x:560,y:100,w:116,h:16},
+      {x:740,y:200,w:140,h:16},
+      {x:940,y:80,w:16,h:140},{x:1040,y:80,w:16,h:140},{x:940,y:80,w:116,h:16},
+      {x:1120,y:140,w:140,h:16},{x:1320,y:80,w:140,h:16},{x:1500,y:60,w:200,h:16},
+      {x:-100,y:490,w:2100,h:20},
     ],
-    spikes: [
-      {x:380,y:315,w:40,h:15},
-      {x:760,y:235,w:40,h:15},
-    ],
-    worldW: 1800,
+    spikes:[{x:360,y:294,w:80,h:14},{x:740,y:214,w:80,h:14}],
+    movingPlats:[],
   },
-  // LEVEL 3 — slide tunnels + dive
+  // 3 — Slide tunnels
   {
-    spawn: {x:40,y:340},
-    flag:  {x:1600,y:200},
-    platforms: [
-      {x:0,   y:380, w:200, h:20},
-      // low ceiling tunnel (must slide)
-      {x:200, y:340, w:300, h:20}, // floor
-      {x:200, y:310, w:300, h:15}, // ceiling — gap=30, player normal=28 won't fit, slide=14 fits
-      {x:500, y:300, w:150, h:20},
-      {x:700, y:260, w:150, h:20},
-      // dive pit
-      {x:900, y:180, w:80,  h:20},
-      {x:1050,y:380, w:80,  h:20}, // bounce target after dive
-      {x:1180,y:260, w:150, h:20},
-      {x:1380,y:160, w:200, h:20},
-      {x:1620,y:180, w:150, h:20},
-      {x:-200,y:490, w:2200,h:20},
+    spawn:{x:40,y:340}, flag:{x:1700,y:160}, worldW:1900,
+    platforms:[
+      {x:0,y:380,w:180,h:16},
+      {x:180,y:340,w:280,h:16},{x:180,y:312,w:280,h:12}, // tunnel floor+ceiling
+      {x:480,y:280,w:160,h:16},
+      {x:680,y:240,w:160,h:16},
+      {x:880,y:300,w:280,h:16},{x:880,y:272,w:280,h:12}, // tunnel 2
+      {x:1200,y:220,w:160,h:16},
+      {x:1400,y:160,w:160,h:16},{x:1600,y:140,w:200,h:16},
+      {x:-100,y:490,w:2200,h:20},
     ],
-    spikes: [
-      {x:500, y:465,w:300,h:15},
-      {x:860, y:465,w:160,h:15},
+    spikes:[
+      {x:480,y:465,w:180,h:14},{x:700,y:465,w:160,h:14},
     ],
-    worldW: 1900,
+    movingPlats:[],
   },
-  // LEVEL 4 — mixed chaos
+  // 4 — Moving platforms
   {
-    spawn: {x:40,y:300},
-    flag:  {x:1800,y:60},
-    platforms: [
-      {x:0,   y:340, w:120, h:20},
-      {x:170, y:280, w:80,  h:20},
-      {x:300, y:220, w:80,  h:20},
-      {x:300, y:190, w:80,  h:15}, // slide tunnel top
-      {x:430, y:160, w:100, h:20},
-      {x:580, y:200, w:20,  h:160},// wall
-      {x:660, y:200, w:20,  h:160},// wall
-      {x:580, y:200, w:100, h:20}, // top
-      {x:740, y:300, w:100, h:20},
-      {x:900, y:240, w:100, h:20},
-      {x:1060,y:180, w:100, h:20},
-      {x:1220,y:120, w:100, h:20},
-      {x:1380,y:200, w:20,  h:180},
-      {x:1480,y:200, w:20,  h:180},
-      {x:1380,y:200, w:120, h:20},
-      {x:1560,y:120, w:120, h:20},
-      {x:1730,y:40,  w:150, h:20},
-      {x:-200,y:490, w:2400,h:20},
+    spawn:{x:40,y:380}, flag:{x:1700,y:200}, worldW:1900,
+    platforms:[
+      {x:0,y:420,w:180,h:16},{x:1680,y:180,w:200,h:16},
+      {x:-100,y:490,w:2200,h:20},
     ],
-    spikes: [
-      {x:120, y:465,w:40,h:15},
-      {x:740, y:315,w:100,h:15},
-      {x:1060,y:195,w:100,h:15},
+    spikes:[
+      {x:200,y:475,w:600,h:14},{x:900,y:475,w:600,h:14},
     ],
-    worldW: 2100,
+    movingPlats:[
+      {x:240,y:360,w:100,h:14,dx:1.8,dy:0,x0:240,range:160},
+      {x:440,y:300,w:100,h:14,dx:0,dy:1.5,y0:300,range:80},
+      {x:640,y:340,w:100,h:14,dx:2.2,dy:0,x0:640,range:200},
+      {x:900,y:280,w:100,h:14,dx:0,dy:2,y0:280,range:100},
+      {x:1100,y:320,w:100,h:14,dx:2,dy:0,x0:1100,range:180},
+      {x:1340,y:260,w:100,h:14,dx:0,dy:1.8,y0:260,range:120},
+      {x:1520,y:300,w:100,h:14,dx:1.5,dy:0,x0:1520,range:100},
+    ],
   },
-  // LEVEL 5 — everything
+  // 5 — Dive bouncing + precision
   {
-    spawn: {x:40,y:380},
-    flag:  {x:2100,y:80},
-    platforms: [
-      {x:0,   y:420, w:120, h:20},
-      // slide section
-      {x:120, y:380, w:200, h:20},
-      {x:120, y:352, w:200, h:14},
-      {x:320, y:320, w:80,  h:20},
-      // wall jump shaft 1
-      {x:440, y:140, w:20,  h:200},
-      {x:540, y:140, w:20,  h:200},
-      {x:440, y:140, w:120, h:20},
-      {x:620, y:260, w:120, h:20},
-      // gap with spikes
-      {x:800, y:200, w:80,  h:20},
-      {x:960, y:140, w:80,  h:20},
-      // dive section
-      {x:1100,y:60,  w:80,  h:20},
-      {x:1240,y:340, w:80,  h:20}, // land after dive
-      // wall jump shaft 2
-      {x:1380,y:100, w:20,  h:260},
-      {x:1480,y:100, w:20,  h:260},
-      {x:1380,y:100, w:120, h:20},
-      // final stretch
-      {x:1560,y:180, w:100, h:20},
-      {x:1720,y:120, w:100, h:20},
-      {x:1880,y:60,  w:100, h:20},
-      {x:2060,y:60,  w:150, h:20},
-      {x:-200,y:490, w:2700,h:20},
+    spawn:{x:40,y:300}, flag:{x:1800,y:60}, worldW:2000,
+    platforms:[
+      {x:0,y:340,w:120,h:16},
+      {x:170,y:240,w:80,h:16},{x:310,y:160,w:80,h:16},
+      {x:450,y:60,w:80,h:16}, // dive from here
+      {x:600,y:340,w:80,h:16}, // land after dive
+      {x:750,y:240,w:80,h:16},{x:900,y:160,w:80,h:16},
+      {x:1050,y:60,w:80,h:16},
+      {x:1200,y:340,w:80,h:16},
+      {x:1350,y:240,w:80,h:16},{x:1500,y:160,w:80,h:16},
+      {x:1650,y:80,w:80,h:16},{x:1790,y:40,w:150,h:16},
+      {x:-100,y:490,w:2300,h:20},
     ],
-    spikes: [
-      {x:120, y:465,w:300,h:15},
-      {x:620, y:275,w:120,h:15},
-      {x:740, y:465,w:400,h:15},
-      {x:1240,y:355,w:80, h:15},
-      {x:1560,y:195,w:100,h:15},
+    spikes:[
+      {x:120,y:475,w:460,h:14},{x:680,y:475,w:460,h:14},{x:1240,y:475,w:500,h:14},
     ],
-    worldW: 2400,
+    movingPlats:[],
+  },
+  // 6 — Wall jumps + moving platforms
+  {
+    spawn:{x:40,y:400}, flag:{x:1900,y:60}, worldW:2100,
+    platforms:[
+      {x:0,y:440,w:150,h:16},
+      {x:200,y:100,w:16,h:360},{x:300,y:100,w:16,h:360},{x:200,y:100,w:116,h:16},
+      {x:380,y:320,w:120,h:16},
+      {x:600,y:100,w:16,h:240},{x:700,y:100,w:16,h:240},{x:600,y:100,w:116,h:16},
+      {x:1800,y:40,w:200,h:16},
+      {x:-100,y:490,w:2400,h:20},
+    ],
+    spikes:[
+      {x:380,y:334,w:80,h:14},
+    ],
+    movingPlats:[
+      {x:800,y:280,w:100,h:14,dx:2,dy:0,x0:800,range:200},
+      {x:1060,y:220,w:100,h:14,dx:0,dy:2,y0:220,range:120},
+      {x:1240,y:160,w:100,h:14,dx:2.5,dy:0,x0:1240,range:220},
+      {x:1520,y:100,w:100,h:14,dx:0,dy:1.8,y0:100,range:100},
+    ],
+  },
+  // 7 — All mechanics, tight corridors
+  {
+    spawn:{x:40,y:360}, flag:{x:2000,y:60}, worldW:2200,
+    platforms:[
+      {x:0,y:400,w:120,h:16},
+      {x:160,y:360,w:200,h:16},{x:160,y:332,w:200,h:12},
+      {x:400,y:300,w:80,h:16},
+      {x:530,y:100,w:16,h:220},{x:630,y:100,w:16,h:220},{x:530,y:100,w:116,h:16},
+      {x:710,y:220,w:100,h:16},
+      {x:860,y:360,w:200,h:16},{x:860,y:332,w:200,h:12},
+      {x:1100,y:280,w:80,h:16},
+      {x:1240,y:100,w:16,h:200},{x:1340,y:100,w:16,h:200},{x:1240,y:100,w:116,h:16},
+      {x:1420,y:180,w:120,h:16},
+      {x:1600,y:120,w:80,h:16},{x:1740,y:60,w:80,h:16},{x:1880,y:40,w:200,h:16},
+      {x:-100,y:490,w:2500,h:20},
+    ],
+    spikes:[
+      {x:400,y:475,w:120,h:14},{x:710,y:475,w:140,h:14},{x:1100,y:475,w:130,h:14},
+    ],
+    movingPlats:[
+      {x:860,y:240,w:90,h:14,dx:1.8,dy:0,x0:860,range:160},
+    ],
+  },
+  // 8 — Chaos: small moving + spikes everywhere
+  {
+    spawn:{x:40,y:400}, flag:{x:2100,y:60}, worldW:2300,
+    platforms:[
+      {x:0,y:440,w:120,h:16},{x:2080,y:40,w:180,h:16},
+      {x:-100,y:490,w:2600,h:20},
+    ],
+    spikes:[
+      {x:130,y:475,w:240,h:14},{x:450,y:475,w:240,h:14},
+      {x:770,y:475,w:240,h:14},{x:1090,y:475,w:240,h:14},
+      {x:1410,y:475,w:240,h:14},{x:1730,y:475,w:240,h:14},
+    ],
+    movingPlats:[
+      {x:160,y:360,w:80,h:14,dx:2,dy:0,x0:160,range:100},
+      {x:360,y:300,w:80,h:14,dx:0,dy:2,y0:300,range:120},
+      {x:540,y:260,w:80,h:14,dx:2.5,dy:0,x0:540,range:140},
+      {x:740,y:200,w:80,h:14,dx:0,dy:2.2,y0:200,range:140},
+      {x:940,y:160,w:80,h:14,dx:3,dy:0,x0:940,range:160},
+      {x:1160,y:220,w:80,h:14,dx:0,dy:2.5,y0:220,range:160},
+      {x:1380,y:180,w:80,h:14,dx:2.8,dy:0,x0:1380,range:180},
+      {x:1600,y:140,w:80,h:14,dx:0,dy:3,y0:140,range:180},
+      {x:1820,y:100,w:80,h:14,dx:2,dy:0,x0:1820,range:140},
+    ],
+  },
+  // 9 — Precision wall jumps + tiny platforms
+  {
+    spawn:{x:40,y:420}, flag:{x:2200,y:40}, worldW:2400,
+    platforms:[
+      {x:0,y:460,w:100,h:16},
+      {x:140,y:100,w:16,h:380},{x:220,y:100,w:16,h:380},{x:140,y:100,w:96,h:16},
+      {x:290,y:360,w:60,h:16},
+      {x:400,y:100,w:16,h:280},{x:480,y:100,w:16,h:280},{x:400,y:100,w:96,h:16},
+      {x:550,y:300,w:60,h:16},
+      {x:660,y:100,w:16,h:220},{x:740,y:100,w:16,h:220},{x:660,y:100,w:96,h:16},
+      {x:810,y:240,w:60,h:16},
+      {x:920,y:80,w:16,h:180},{x:1000,y:80,w:16,h:180},{x:920,y:80,w:96,h:16},
+      {x:1070,y:180,w:60,h:16},
+      {x:1180,y:120,w:60,h:16},{x:1300,y:80,w:60,h:16},
+      {x:1420,y:100,w:16,h:160},{x:1500,y:100,w:16,h:160},{x:1420,y:100,w:96,h:16},
+      {x:1580,y:140,w:60,h:16},{x:1700,y:80,w:60,h:16},{x:1820,y:40,w:60,h:16},
+      {x:1940,y:80,w:60,h:16},{x:2060,y:40,w:60,h:16},{x:2180,y:20,w:180,h:16},
+      {x:-100,y:490,w:2700,h:20},
+    ],
+    spikes:[
+      {x:290,y:375,w:60,h:14},{x:550,y:315,w:60,h:14},
+      {x:810,y:255,w:60,h:14},{x:1070,y:195,w:60,h:14},
+    ],
+    movingPlats:[],
+  },
+  // 10 — FINAL: everything combined, brutal
+  {
+    spawn:{x:40,y:420}, flag:{x:2400,y:40}, worldW:2600,
+    platforms:[
+      {x:0,y:460,w:120,h:16},
+      // slide tunnel
+      {x:120,y:420,w:240,h:16},{x:120,y:392,w:240,h:12},
+      // wall shaft 1
+      {x:420,y:100,w:16,h:340},{x:520,y:100,w:16,h:340},{x:420,y:100,w:116,h:16},
+      {x:600,y:300,w:80,h:16},
+      // moving section
+      {x:900,y:460,w:80,h:16},
+      // wall shaft 2
+      {x:1100,y:80,w:16,h:240},{x:1200,y:80,w:16,h:240},{x:1100,y:80,w:116,h:16},
+      // slide tunnel 2
+      {x:1280,y:200,w:240,h:16},{x:1280,y:172,w:240,h:12},
+      // precision jumps
+      {x:1580,y:160,w:60,h:16},{x:1700,y:120,w:60,h:16},{x:1820,y:80,w:60,h:16},
+      // wall shaft 3
+      {x:1940,y:60,w:16,h:160},{x:2040,y:60,w:16,h:160},{x:1940,y:60,w:116,h:16},
+      // final
+      {x:2120,y:100,w:80,h:16},{x:2260,y:60,w:80,h:16},{x:2380,y:20,w:200,h:16},
+      {x:-100,y:490,w:2900,h:20},
+    ],
+    spikes:[
+      {x:120,y:475,w:300,h:14},
+      {x:600,y:315,w:80,h:14},
+      {x:760,y:475,w:320,h:14},
+      {x:1280,y:475,w:280,h:14},
+      {x:1580,y:475,w:340,h:14},
+      {x:2120,y:475,w:240,h:14},
+    ],
+    movingPlats:[
+      {x:740,y:360,w:90,h:14,dx:2.5,dy:0,x0:740,range:140},
+      {x:960,y:300,w:90,h:14,dx:0,dy:2.5,y0:300,range:140},
+      {x:1080,y:240,w:90,h:14,dx:3,dy:0,x0:1080,range:100},
+      {x:2120,y:200,w:90,h:14,dx:0,dy:2,y0:200,range:120},
+    ],
   },
 ];
 
-// ── GAME STATE ─────────────────────────────────────────
-let state = 'menu'; // menu | playing | complete | win
-let levelIdx = 0;
-let timer = 0;
-let bestTimes = Array(LEVELS.length).fill(null);
+// ── PLAYER CONSTANTS ──────────────────────────────────────────────────────────
+const PW=22, PH=28, PH_SLIDE=13;
+const GRAV=0.58, JUMP=-13, WJ_VX=7.5, WJ_VY=-11.5;
+const RUN=5.2, SLIDE_SPD=8.5, ACCEL=0.85, FRIC=0.76, AIR_FRIC=0.92;
+const DIVE_VY=20, DIVE_BOUNCE=-17, MAX_FALL=22;
 
-// ── PLAYER ─────────────────────────────────────────────
-const PW = 22, PH_NORMAL = 28, PH_SLIDE = 14;
-let p = {};
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let state='menu', levelIdx=0, timer=0;
+let bestTimes=Array(LEVELS.length).fill(null);
+let p={}, camX=0, camY=0;
+let mpTimers=[];
 
-function resetPlayer() {
-  const lv = LEVELS[levelIdx];
-  p = {
-    x: lv.spawn.x, y: lv.spawn.y,
-    vx: 0, vy: 0,
-    w: PW, h: PH_NORMAL,
-    onGround: false,
-    onWall: 0,     // -1 left, 1 right, 0 none
-    sliding: false,
-    diving: false,
-    diveBounce: false, // can get extra jump after dive land
-    coyote: 0,
-    jumpBuffer: 0,
-    wallJumpLock: 0,
-    facing: 1,
-  };
+function resetPlayer(){
+  const lv=LEVELS[levelIdx];
+  p={x:lv.spawn.x,y:lv.spawn.y,vx:0,vy:0,w:PW,h:PH,
+     onGround:false,onWall:0,sliding:false,diving:false,
+     diveBounce:false,coyote:0,jumpBuf:0,wjLock:0,facing:1};
+  mpTimers=lv.movingPlats.map(()=>0);
 }
 
-// ── PHYSICS CONSTANTS ──────────────────────────────────
-const GRAVITY     = 0.55;
-const JUMP_FORCE  = -12.5;
-const WALLJUMP_VX = 7;
-const WALLJUMP_VY = -11;
-const RUN_SPEED   = 5;
-const SLIDE_SPEED = 8;
-const ACCEL       = 0.8;
-const FRICTION    = 0.78;
-const DIVE_VY     = 18;
-const DIVE_BOUNCE_VY = -16;
-const MAX_FALL    = 22;
-
-// ── CAMERA ─────────────────────────────────────────────
-let camX = 0, camY = 0;
-
-function updateCamera() {
-  const lv = LEVELS[levelIdx];
-  const tx = p.x + p.w/2 - W/2;
-  const ty = p.y + p.h/2 - H/2;
-  camX += (tx - camX) * 0.12;
-  camY += (ty - camY) * 0.12;
-  camX = Math.max(0, Math.min(lv.worldW - W, camX));
-  camY = Math.max(0, Math.min(500 - H, camY));
+function getAllPlats(){
+  const lv=LEVELS[levelIdx];
+  const moving=lv.movingPlats.map((mp,i)=>{
+    const t=mpTimers[i];
+    let x=mp.x0!==undefined?mp.x0:mp.x;
+    let y=mp.y0!==undefined?mp.y0:mp.y;
+    if(mp.dx) x+=Math.sin(t*mp.dx*0.04)*mp.range;
+    if(mp.dy) y+=Math.sin(t*mp.dy*0.04)*mp.range;
+    return {x,y,w:mp.w,h:mp.h};
+  });
+  return [...lv.platforms,...moving];
 }
 
-// ── COLLISION ──────────────────────────────────────────
-function rectsOverlap(ax,ay,aw,ah, bx,by,bw,bh) {
-  return ax<bx+bw && ax+aw>bx && ay<by+bh && ay+ah>by;
+function rectsOverlap(ax,ay,aw,ah,bx,by,bw,bh){
+  return ax<bx+bw&&ax+aw>bx&&ay<by+bh&&ay+ah>by;
 }
 
-function resolvePlayer(plats) {
-  const lv = LEVELS[levelIdx];
+function resolve(plats){
   // X
-  p.x += p.vx;
-  p.onWall = 0;
-  for (const pl of plats) {
-    if (rectsOverlap(p.x,p.y,p.w,p.h, pl.x,pl.y,pl.w,pl.h)) {
-      if (p.vx > 0) { p.x = pl.x - p.w; p.onWall = 1; }
-      else if (p.vx < 0) { p.x = pl.x + pl.w; p.onWall = -1; }
-      p.vx = 0;
+  p.x+=p.vx; p.onWall=0;
+  for(const pl of plats){
+    if(rectsOverlap(p.x,p.y,p.w,p.h,pl.x,pl.y,pl.w,pl.h)){
+      if(p.vx>0){p.x=pl.x-p.w;p.onWall=1;}
+      else if(p.vx<0){p.x=pl.x+pl.w;p.onWall=-1;}
+      p.vx=0;
     }
   }
-
   // Y
-  p.vy = Math.min(p.vy, MAX_FALL);
-  p.y += p.vy;
-  p.onGround = false;
-  for (const pl of plats) {
-    if (rectsOverlap(p.x,p.y,p.w,p.h, pl.x,pl.y,pl.w,pl.h)) {
-      if (p.vy > 0) {
-        p.y = pl.y - p.h;
-        p.onGround = true;
-        if (p.diveBounce) {
-          // give extra bounce on next jump press — handled in update
-        }
-        p.diving = false;
-        p.vy = 0;
-      } else if (p.vy < 0) {
-        p.y = pl.y + pl.h;
-        p.vy = 0;
-      }
+  p.vy=Math.min(p.vy,MAX_FALL);
+  p.y+=p.vy; p.onGround=false;
+  for(const pl of plats){
+    if(rectsOverlap(p.x,p.y,p.w,p.h,pl.x,pl.y,pl.w,pl.h)){
+      if(p.vy>=0){p.y=pl.y-p.h;p.onGround=true;p.diving=false;p.vy=0;}
+      else{p.y=pl.y+pl.h;p.vy=0;}
     }
   }
 }
 
-// ── UPDATE ─────────────────────────────────────────────
-let prevJump = false;
-let prevDown = false;
+let prevJump=false,prevDown=false;
 
-function update() {
-  if (state !== 'playing') return;
-  timer += 1/60;
+function update(){
+  if(state!=='playing')return;
+  timer+=1/60;
+  const lv=LEVELS[levelIdx];
+  mpTimers=mpTimers.map(t=>t+1);
 
-  const lv = LEVELS[levelIdx];
-  const left  = keys['ArrowLeft']  || keys['KeyA'];
-  const right  = keys['ArrowRight'] || keys['KeyD'];
-  const jumpK  = keys['ArrowUp']   || keys['KeyW'];
-  const downK  = keys['ArrowDown'] || keys['KeyS'];
-  const jumpPressed = jumpK && !prevJump;
-  const downPressed = downK && !prevDown;
-  prevJump = jumpK;
-  prevDown = downK;
+  const left =keys['ArrowLeft'];
+  const right=keys['ArrowRight'];
+  const jumpK=keys['ArrowUp'];
+  const downK=keys['ArrowDown'];
+  const jp=jumpK&&!prevJump;
+  const dp=downK&&!prevDown;
+  prevJump=jumpK; prevDown=downK;
 
-  // ── SLIDE ──
-  const wantSlide = downK && p.onGround && (left || right || Math.abs(p.vx) > 2);
-  if (wantSlide && !p.sliding) {
-    p.sliding = true;
-    p.h = PH_SLIDE;
-    p.y += (PH_NORMAL - PH_SLIDE);
-  }
-  if (!wantSlide && p.sliding) {
-    // check headroom
-    p.h = PH_NORMAL;
-    p.y -= (PH_NORMAL - PH_SLIDE);
-    let blocked = false;
-    for (const pl of lv.platforms) {
-      if (rectsOverlap(p.x,p.y,p.w,p.h, pl.x,pl.y,pl.w,pl.h)) { blocked=true; break; }
-    }
-    if (blocked) { p.h = PH_SLIDE; p.y += (PH_NORMAL-PH_SLIDE); } // stay sliding
-    else p.sliding = false;
+  // slide
+  const wantSlide=downK&&p.onGround&&(left||right||Math.abs(p.vx)>2);
+  if(wantSlide&&!p.sliding){p.sliding=true;p.y+=(PH-PH_SLIDE);p.h=PH_SLIDE;}
+  if(!wantSlide&&p.sliding){
+    p.h=PH;p.y-=(PH-PH_SLIDE);
+    let blocked=false;
+    for(const pl of getAllPlats())if(rectsOverlap(p.x,p.y,p.w,p.h,pl.x,pl.y,pl.w,pl.h)){blocked=true;break;}
+    if(blocked){p.h=PH_SLIDE;p.y+=(PH-PH_SLIDE);}else p.sliding=false;
   }
 
-  // ── HORIZONTAL ──
-  if (p.wallJumpLock > 0) p.wallJumpLock--;
-  const speed = p.sliding ? SLIDE_SPEED : RUN_SPEED;
-  if (!p.diving) {
-    if (left  && p.wallJumpLock === 0) { p.vx -= ACCEL; if(p.vx<-speed) p.vx=-speed; p.facing=-1; }
-    if (right && p.wallJumpLock === 0) { p.vx += ACCEL; if(p.vx> speed) p.vx= speed; p.facing= 1; }
-    if (!left && !right) p.vx *= p.onGround ? FRICTION : 0.92;
+  // horizontal
+  if(p.wjLock>0)p.wjLock--;
+  const spd=p.sliding?SLIDE_SPD:RUN;
+  if(!p.diving){
+    if(left&&!p.wjLock){p.vx-=ACCEL;if(p.vx<-spd)p.vx=-spd;p.facing=-1;}
+    if(right&&!p.wjLock){p.vx+=ACCEL;if(p.vx>spd)p.vx=spd;p.facing=1;}
+    if(!left&&!right)p.vx*=p.onGround?FRIC:AIR_FRIC;
   }
 
-  // ── GRAVITY ──
-  if (!p.onGround) p.vy += GRAVITY;
+  // gravity
+  if(!p.onGround)p.vy+=GRAV;
 
-  // ── COYOTE & JUMP BUFFER ──
-  if (p.onGround) p.coyote = 8;
-  else if (p.coyote > 0) p.coyote--;
-  if (jumpPressed) p.jumpBuffer = 10;
-  else if (p.jumpBuffer > 0) p.jumpBuffer--;
+  // coyote + buffer
+  if(p.onGround)p.coyote=8;else if(p.coyote>0)p.coyote--;
+  if(jp)p.jumpBuf=10;else if(p.jumpBuf>0)p.jumpBuf--;
 
-  // ── DIVE ──
-  if (downPressed && !p.onGround && !p.sliding) {
-    p.diving = true;
-    p.vy = DIVE_VY;
-    p.vx *= 0.3;
-    p.diveBounce = true;
+  // dive
+  if(dp&&!p.onGround&&!p.sliding){
+    p.diving=true;p.vy=DIVE_VY;p.vx*=0.3;p.diveBounce=true;
   }
 
-  // ── JUMP ──
-  if (p.jumpBuffer > 0) {
-    // normal / coyote
-    if (p.coyote > 0) {
-      const bvy = (p.diveBounce && p.onGround) ? DIVE_BOUNCE_VY : JUMP_FORCE;
-      p.vy = bvy;
-      p.diveBounce = false;
-      p.coyote = 0;
-      p.jumpBuffer = 0;
-      p.sliding = false;
-      if (p.h !== PH_NORMAL) { p.y -= (PH_NORMAL-PH_SLIDE); p.h = PH_NORMAL; }
-    }
-    // wall jump
-    else if (p.onWall !== 0 && !p.onGround) {
-      p.vy = WALLJUMP_VY;
-      p.vx = -p.onWall * WALLJUMP_VX;
-      p.wallJumpLock = 14;
-      p.jumpBuffer = 0;
-      p.facing = -p.onWall;
+  // jump
+  if(p.jumpBuf>0){
+    if(p.coyote>0){
+      const bvy=(p.diveBounce&&p.onGround)?DIVE_BOUNCE:JUMP;
+      p.vy=bvy;p.diveBounce=false;p.coyote=0;p.jumpBuf=0;
+      p.sliding=false;
+      if(p.h!==PH){p.y-=(PH-PH_SLIDE);p.h=PH;}
+    } else if(p.onWall&&!p.onGround){
+      p.vy=WJ_VY;p.vx=-p.onWall*WJ_VX;p.wjLock=14;p.jumpBuf=0;p.facing=-p.onWall;
     }
   }
 
-  resolvePlayer(lv.platforms);
-  updateCamera();
+  const plats=getAllPlats();
+  resolve(plats);
 
-  // ── SPIKE / FALL DEATH ──
-  for (const sp of lv.spikes) {
-    if (rectsOverlap(p.x,p.y,p.w,p.h, sp.x,sp.y,sp.w,sp.h)) { resetPlayer(); return; }
+  // camera
+  const tx=p.x+p.w/2-W/2, ty=p.y+p.h/2-H/2;
+  camX+=(tx-camX)*0.12; camY+=(ty-camY)*0.12;
+  camX=Math.max(0,Math.min(lv.worldW-W,camX));
+  camY=Math.max(0,Math.min(500-H,camY));
+
+  // spikes / fall
+  for(const sp of lv.spikes){
+    if(rectsOverlap(p.x,p.y,p.w,p.h,sp.x,sp.y,sp.w,sp.h)){resetPlayer();return;}
   }
-  if (p.y > 520) { resetPlayer(); return; }
+  if(p.y>520){resetPlayer();return;}
 
-  // ── FLAG ──
-  const f = lv.flag;
-  if (rectsOverlap(p.x,p.y,p.w,p.h, f.x,f.y,20,40)) {
-    if (bestTimes[levelIdx] === null || timer < bestTimes[levelIdx]) bestTimes[levelIdx] = timer;
-    if (levelIdx < LEVELS.length-1) { state = 'complete'; }
-    else { state = 'win'; }
-  }
-}
-
-// ── DRAW HELPERS ───────────────────────────────────────
-function drawFlag(x, y) {
-  const sx = x - camX, sy = y - camY;
-  ctx.fillStyle = '#000';
-  ctx.fillRect(sx, sy, 3, 40);
-  ctx.fillStyle = '#e00';
-  ctx.beginPath();
-  ctx.moveTo(sx+3, sy);
-  ctx.lineTo(sx+20, sy+8);
-  ctx.lineTo(sx+3, sy+16);
-  ctx.fill();
-}
-
-function drawSpike(sp) {
-  const sx = sp.x - camX, sy = sp.y - camY;
-  const count = Math.floor(sp.w / 15);
-  ctx.fillStyle = '#e00';
-  for (let i=0; i<count; i++) {
-    const bx = sx + i*15;
-    ctx.beginPath();
-    ctx.moveTo(bx, sy+sp.h);
-    ctx.lineTo(bx+7.5, sy);
-    ctx.lineTo(bx+15, sy+sp.h);
-    ctx.fill();
+  // flag
+  const f=lv.flag;
+  if(rectsOverlap(p.x,p.y,p.w,p.h,f.x,f.y,20,44)){
+    if(!bestTimes[levelIdx]||timer<bestTimes[levelIdx])bestTimes[levelIdx]=timer;
+    state=levelIdx<LEVELS.length-1?'complete':'win';
   }
 }
 
-function drawPlayer() {
-  const sx = p.x - camX, sy = p.y - camY;
-  ctx.fillStyle = '#000';
-  // body
-  ctx.fillRect(sx, sy, p.w, p.h);
-  // eyes
-  ctx.fillStyle = '#fff';
-  const eyeY = sy + 7;
-  if (!p.sliding) {
-    ctx.fillRect(sx + (p.facing>0?13:4), eyeY, 5, 5);
-  }
-}
-
-function fmtTime(t) {
-  const m = Math.floor(t/60).toString().padStart(2,'0');
-  const s = (t%60).toFixed(2).padStart(5,'0');
+// ── DRAW ─────────────────────────────────────────────────────────────────────
+function fmt(t){
+  const m=Math.floor(t/60).toString().padStart(2,'0');
+  const s=(t%60).toFixed(2).padStart(5,'0');
   return m+':'+s;
 }
 
-// ── DRAW ───────────────────────────────────────────────
-function draw() {
-  ctx.clearRect(0,0,W,H);
+function drawSpike(sp){
+  const n=Math.floor(sp.w/15);
+  ctx.fillStyle='#e00';
+  for(let i=0;i<n;i++){
+    const bx=sp.x-camX+i*15,by=sp.y-camY;
+    ctx.beginPath();ctx.moveTo(bx,by+sp.h);ctx.lineTo(bx+7.5,by);ctx.lineTo(bx+15,by+sp.h);ctx.fill();
+  }
+}
 
-  if (state === 'menu') {
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0,0,W,H);
-    ctx.fillStyle = '#000';
-    ctx.font = 'bold 52px Courier New';
-    ctx.textAlign = 'center';
-    ctx.fillText('PLATFORMER', W/2, 160);
-    ctx.font = '18px Courier New';
-    ctx.fillText('Arrow Keys / WASD to move', W/2, 220);
-    ctx.fillText('W / Up = Jump   |   Wall Jump against walls', W/2, 248);
-    ctx.fillText('S / Down (ground) = Slide   |   S / Down (air) = Dive', W/2, 276);
-    ctx.fillText('Dive then Jump = Super Bounce', W/2, 304);
-    // play button
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(W/2-80, 350, 160, 50);
-    ctx.font = 'bold 24px Courier New';
-    ctx.fillText('PLAY', W/2, 383);
-    c.style.cursor = 'pointer';
+function drawFlag(f){
+  const sx=f.x-camX,sy=f.y-camY;
+  ctx.fillStyle='#222';ctx.fillRect(sx,sy,3,44);
+  ctx.fillStyle='#0c0';
+  ctx.beginPath();ctx.moveTo(sx+3,sy);ctx.lineTo(sx+22,sy+10);ctx.lineTo(sx+3,sy+20);ctx.fill();
+}
+
+function drawPlayer(){
+  const sx=p.x-camX,sy=p.y-camY;
+  // shadow
+  ctx.fillStyle='rgba(0,0,0,0.18)';
+  ctx.fillRect(sx+3,sy+p.h,p.w-2,6);
+  // body
+  ctx.fillStyle='#111';
+  if(p.sliding){
+    ctx.fillRect(sx,sy,p.w,p.h);
+  } else {
+    ctx.beginPath();
+    ctx.roundRect(sx,sy,p.w,p.h,5);
+    ctx.fill();
+  }
+  // eye
+  if(!p.sliding){
+    ctx.fillStyle='#fff';
+    const ex=p.facing>0?sx+13:sx+4;
+    ctx.fillRect(ex,sy+7,5,5);
+    ctx.fillStyle='#111';
+    ctx.fillRect(ex+(p.facing>0?1:-1),sy+8,2,3);
+  }
+}
+
+function drawMovingPlats(){
+  const lv=LEVELS[levelIdx];
+  lv.movingPlats.forEach((mp,i)=>{
+    const t=mpTimers[i];
+    let x=mp.x0!==undefined?mp.x0:mp.x;
+    let y=mp.y0!==undefined?mp.y0:mp.y;
+    if(mp.dx)x+=Math.sin(t*mp.dx*0.04)*mp.range;
+    if(mp.dy)y+=Math.sin(t*mp.dy*0.04)*mp.range;
+    ctx.fillStyle='#444';
+    ctx.fillRect(x-camX,y-camY,mp.w,mp.h);
+    // stripe
+    ctx.fillStyle='#666';
+    ctx.fillRect(x-camX+4,y-camY,mp.w-8,3);
+  });
+}
+
+function draw(){
+  ctx.fillStyle='#f5f5f0';
+  ctx.fillRect(0,0,W,H);
+
+  if(state==='menu'){
+    ctx.fillStyle='#111';
+    ctx.font='bold 58px Courier New';
+    ctx.textAlign='center';
+    ctx.fillText('OVO',W/2,130);
+    ctx.font='16px Courier New';
+    ctx.fillStyle='#444';
+    ctx.fillText('← → Move   ↑ Jump   ↓ Slide / Dive',W/2,185);
+    ctx.fillText('Wall Jump: jump while touching a wall',W/2,210);
+    ctx.fillText('Dive Bounce: dive ↓ in air, then jump on landing',W/2,235);
+    ctx.fillText('10 levels of increasing difficulty',W/2,268);
+    // button
+    ctx.fillStyle='#111';
+    roundRect(W/2-70,300,140,48,10);ctx.fill();
+    ctx.fillStyle='#f5f5f0';
+    ctx.font='bold 22px Courier New';
+    ctx.fillText('PLAY',W/2,332);
+    c.style.cursor='pointer';
     return;
   }
 
-  if (state === 'win') {
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0,0,W,H);
-    ctx.fillStyle = '#000';
-    ctx.font = 'bold 48px Courier New';
-    ctx.textAlign = 'center';
-    ctx.fillText('YOU WIN!', W/2, 160);
-    ctx.font = '20px Courier New';
-    ctx.fillText('Best Times:', W/2, 220);
-    LEVELS.forEach((_,i) => {
-      const t = bestTimes[i];
-      ctx.fillText(`Level ${i+1}: ${t ? fmtTime(t) : '--'}`, W/2, 255 + i*32);
+  if(state==='complete'){
+    ctx.fillStyle='#111';
+    ctx.font='bold 42px Courier New';
+    ctx.textAlign='center';
+    ctx.fillText('LEVEL COMPLETE!',W/2,130);
+    ctx.font='22px Courier New';
+    ctx.fillStyle='#333';
+    ctx.fillText(`Level ${levelIdx+1}  —  ${fmt(timer)}`,W/2,185);
+    if(bestTimes[levelIdx])ctx.fillText(`Best: ${fmt(bestTimes[levelIdx])}`,W/2,218);
+    // rating
+    const acc=timer;
+    let rating='';
+    if(acc<20)rating='⚡ LIGHTNING';
+    else if(acc<40)rating='🔥 BLAZING';
+    else if(acc<60)rating='👍 SOLID';
+    else rating='🐢 KEEP GOING';
+    ctx.fillStyle='#111';
+    ctx.font='bold 26px Courier New';
+    ctx.fillText(rating,W/2,265);
+    ctx.fillStyle='#111';
+    roundRect(W/2-80,310,160,48,10);ctx.fill();
+    ctx.fillStyle='#f5f5f0';
+    ctx.font='bold 20px Courier New';
+    ctx.fillText('NEXT LEVEL',W/2,342);
+    c.style.cursor='pointer';
+    return;
+  }
+
+  if(state==='win'){
+    ctx.fillStyle='#111';
+    ctx.font='bold 50px Courier New';
+    ctx.textAlign='center';
+    ctx.fillText('YOU WIN!',W/2,100);
+    ctx.font='16px Courier New';
+    ctx.fillStyle='#333';
+    LEVELS.forEach((_,i)=>{
+      const t=bestTimes[i];
+      ctx.fillText(`Level ${i+1}: ${t?fmt(t):'--'}`,W/2,148+i*30);
     });
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(W/2-80, 420, 160, 50);
-    ctx.font = 'bold 22px Courier New';
-    ctx.fillText('MENU', W/2, 452);
-    c.style.cursor = 'pointer';
-    return;
-  }
-
-  if (state === 'complete') {
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0,0,W,H);
-    ctx.fillStyle = '#000';
-    ctx.font = 'bold 44px Courier New';
-    ctx.textAlign = 'center';
-    ctx.fillText('LEVEL COMPLETE!', W/2, 150);
-    ctx.font = '24px Courier New';
-    ctx.fillText(`Level ${levelIdx+1}  —  ${fmtTime(timer)}`, W/2, 210);
-    if (bestTimes[levelIdx] !== null)
-      ctx.fillText(`Best: ${fmtTime(bestTimes[levelIdx])}`, W/2, 250);
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(W/2-90, 310, 180, 55);
-    ctx.font = 'bold 24px Courier New';
-    ctx.fillText('NEXT LEVEL', W/2, 345);
-    c.style.cursor = 'pointer';
+    ctx.fillStyle='#111';
+    roundRect(W/2-70,450,140,44,10);ctx.fill();
+    ctx.fillStyle='#f5f5f0';
+    ctx.font='bold 20px Courier New';
+    ctx.fillText('MENU',W/2,479);
+    c.style.cursor='pointer';
     return;
   }
 
   // ── PLAYING ──
-  c.style.cursor = 'none';
-  const lv = LEVELS[levelIdx];
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0,0,W,H);
+  c.style.cursor='none';
+  const lv=LEVELS[levelIdx];
 
-  // platforms
-  ctx.fillStyle = '#000';
-  for (const pl of lv.platforms) {
-    ctx.fillRect(pl.x-camX, pl.y-camY, pl.w, pl.h);
+  // static platforms
+  ctx.fillStyle='#111';
+  for(const pl of lv.platforms){
+    ctx.fillRect(pl.x-camX,pl.y-camY,pl.w,pl.h);
   }
 
+  // moving platforms
+  drawMovingPlats();
+
   // spikes
-  for (const sp of lv.spikes) drawSpike(sp);
+  for(const sp of lv.spikes)drawSpike(sp);
 
   // flag
-  drawFlag(lv.flag.x, lv.flag.y);
+  drawFlag(lv.flag);
 
   // player
   drawPlayer();
 
   // HUD
-  ctx.fillStyle = '#000';
-  ctx.font = 'bold 16px Courier New';
-  ctx.textAlign = 'left';
-  ctx.fillText(`Level ${levelIdx+1} / ${LEVELS.length}`, 12, 28);
-  ctx.textAlign = 'right';
-  ctx.fillText(fmtTime(timer), W-12, 28);
-  if (bestTimes[levelIdx] !== null) {
-    ctx.font = '13px Courier New';
-    ctx.fillText(`Best: ${fmtTime(bestTimes[levelIdx])}`, W-12, 48);
+  ctx.fillStyle='#111';
+  ctx.font='bold 15px Courier New';
+  ctx.textAlign='left';
+  ctx.fillText(`Level ${levelIdx+1} / ${LEVELS.length}`,14,26);
+  ctx.textAlign='right';
+  ctx.fillText(fmt(timer),W-14,26);
+  if(bestTimes[levelIdx]){
+    ctx.font='12px Courier New';
+    ctx.fillStyle='#555';
+    ctx.fillText(`Best ${fmt(bestTimes[levelIdx])}`,W-14,44);
   }
-  // controls reminder (fades after 3s)
-  if (timer < 4) {
-    ctx.globalAlpha = Math.max(0, 1 - timer/3);
-    ctx.font = '13px Courier New';
-    ctx.textAlign = 'center';
-    ctx.fillText('← → Move   W Jump   S Slide/Dive   Wall Jump!', W/2, H-16);
-    ctx.globalAlpha = 1;
+
+  // hint fade
+  if(timer<5){
+    ctx.globalAlpha=Math.max(0,1-timer/4);
+    ctx.font='12px Courier New';
+    ctx.fillStyle='#777';
+    ctx.textAlign='center';
+    ctx.fillText('← → Move  ↑ Jump  ↓ Slide/Dive  Wall Jump against walls',W/2,H-14);
+    ctx.globalAlpha=1;
   }
 }
 
-// ── CLICK ──────────────────────────────────────────────
-c.addEventListener('click', e => {
-  const rect = c.getBoundingClientRect();
-  const mx = (e.clientX - rect.left) * (W / rect.width);
-  const my = (e.clientY - rect.top)  * (H / rect.height);
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
 
-  if (state === 'menu') {
-    if (mx>W/2-80 && mx<W/2+80 && my>350 && my<400) {
-      levelIdx = 0; timer = 0;
-      resetPlayer(); camX=0; camY=0;
-      state = 'playing';
+c.addEventListener('click',e=>{
+  const r=c.getBoundingClientRect();
+  const mx=(e.clientX-r.left)*(W/r.width);
+  const my=(e.clientY-r.top)*(H/r.height);
+  if(state==='menu'){
+    if(mx>W/2-70&&mx<W/2+70&&my>300&&my<348){
+      levelIdx=0;timer=0;resetPlayer();camX=0;camY=0;state='playing';
     }
-  } else if (state === 'complete') {
-    if (mx>W/2-90 && mx<W/2+90 && my>310 && my<365) {
-      levelIdx++;
-      timer = 0;
-      resetPlayer(); camX=0; camY=0;
-      state = 'playing';
+  } else if(state==='complete'){
+    if(mx>W/2-80&&mx<W/2+80&&my>310&&my<358){
+      levelIdx++;timer=0;resetPlayer();camX=0;camY=0;state='playing';
     }
-  } else if (state === 'win') {
-    if (mx>W/2-80 && mx<W/2+80 && my>420 && my<470) {
-      state = 'menu';
-    }
+  } else if(state==='win'){
+    if(mx>W/2-70&&mx<W/2+70&&my>450&&my<494){state='menu';}
   }
 });
 
-// ── LOOP ───────────────────────────────────────────────
-function loop() {
-  update();
-  draw();
-  requestAnimationFrame(loop);
-}
+function loop(){update();draw();requestAnimationFrame(loop);}
 loop();
 </script>
 </body>
